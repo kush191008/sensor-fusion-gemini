@@ -1,5 +1,6 @@
 """
 Unit and Integration Tests for Sensor Fusion Pipeline.
+Validates multi-scenario telemetry generation, Gemini diagnostics, Copilot, and Audit Report generation.
 """
 
 import unittest
@@ -11,7 +12,7 @@ import os
 # Add src to system path
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'src'))
 
-from sensor_simulator import generate_sensor_stream
+from sensor_simulator import generate_sensor_stream, MissionScenario
 from gemini_analyzer import GeminiSensorAnalyzer
 from fusion_engine import AdaptiveKalmanFusion
 
@@ -24,12 +25,13 @@ class TestSensorFusionPipeline(unittest.TestCase):
         self.diagnostics = self.analyzer.analyze_stream(self.df)
         self.fusion = AdaptiveKalmanFusion()
 
-    def test_sensor_stream_generation(self):
-        """Verify data generator produces valid, non-empty, shaped dataframe."""
-        self.assertEqual(len(self.df), 500)
-        expected_cols = {'timestamp', 'ground_truth', 'sensor_temp', 'sensor_baseline', 'sensor_humidity', 'sensor_aux'}
-        self.assertTrue(expected_cols.issubset(set(self.df.columns)))
-        self.assertFalse(self.df.isna().any().any())
+    def test_multi_scenario_generation(self):
+        """Verify telemetry stream generation across all mission scenarios."""
+        for scenario in [MissionScenario.INDUSTRIAL_TURBINE, MissionScenario.AEROSPACE_DRONE, MissionScenario.SMART_AGRICULTURE]:
+            df_scen = generate_sensor_stream(n_samples=400, scenario=scenario)
+            self.assertEqual(len(df_scen), 400)
+            self.assertFalse(df_scen.isna().any().any())
+            self.assertIn('ground_truth', df_scen.columns)
 
     def test_gemini_analyzer_diagnostics(self):
         """Verify diagnostics contain required fields and correctly identify faults."""
@@ -41,9 +43,9 @@ class TestSensorFusionPipeline(unittest.TestCase):
             self.assertIn('recommended_noise_scalar', diag)
             self.assertGreaterEqual(diag['confidence'], 50)
 
-        # Humidity sensor should be detected as FAILED
+        # Humidity/Pressure transducer should be detected as FAILED
         self.assertEqual(self.diagnostics['sensor_humidity']['status'], 'FAILED')
-        # Temp sensor should have drift detected
+        # Temperature/Drifting transducer should have drift detected
         self.assertTrue(self.diagnostics['sensor_temp']['has_drift'])
 
     def test_adaptive_kalman_performance(self):
@@ -62,6 +64,38 @@ class TestSensorFusionPipeline(unittest.TestCase):
         pre_failure_sigma = np.mean(results['uncertainty_sigma'].iloc[100:300])
         post_failure_sigma = np.mean(results['uncertainty_sigma'].iloc[380:480])
         self.assertGreater(post_failure_sigma, pre_failure_sigma)
+
+    def test_telemetry_copilot(self):
+        """Verify the Gemini Telemetry Copilot answers technical queries with grounded context."""
+        context = {
+            'scenario_title': 'Industrial Gas Turbine',
+            'n_samples': 500,
+            'current_fused_val': 652.4,
+            'current_uncertainty': 0.38,
+            'diagnostics': self.diagnostics
+        }
+        res = self.analyzer.chat_with_telemetry("Why did you isolate Sensor 3?", context)
+        self.assertIsInstance(res, str)
+        self.assertIn("Sensor 3", res)
+        self.assertTrue("isolate" in res.lower() or "rail" in res.lower())
+
+    def test_audit_report_generation(self):
+        """Verify automated generation of the ISO/IEEE Incident Audit Report."""
+        context = {
+            'scenario_title': 'Industrial Gas Turbine',
+            'n_samples': 500,
+            'current_fused_val': 652.4,
+            'current_uncertainty': 0.38,
+            'diagnostics': self.diagnostics,
+            'naive_rmse': 14.5,
+            'fused_rmse': 0.31,
+            'improvement_pct': 97.8,
+            'coverage_pct': 98.5
+        }
+        report = self.analyzer.generate_incident_audit_report(context)
+        self.assertIsInstance(report, str)
+        self.assertIn("AUDIT REPORT", report)
+        self.assertIn("Transducer Channel Diagnostic Audit", report)
 
 
 if __name__ == '__main__':
