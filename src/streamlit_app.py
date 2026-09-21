@@ -15,11 +15,21 @@ from plotly.subplots import make_subplots
 import streamlit as st
 from dotenv import load_dotenv
 
+import importlib
+
 # Ensure local src directory is on sys.path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+import sensor_simulator
+importlib.reload(sensor_simulator)
 from sensor_simulator import generate_sensor_stream, MissionScenario, CyberAttackType, SCENARIO_CONFIGS
+
+import gemini_analyzer
+importlib.reload(gemini_analyzer)
 from gemini_analyzer import GeminiSensorAnalyzer
+
+import fusion_engine
+importlib.reload(fusion_engine)
 from fusion_engine import AdaptiveKalmanFusion
 
 load_dotenv()
