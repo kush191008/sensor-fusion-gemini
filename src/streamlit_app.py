@@ -344,33 +344,30 @@ if not st.session_state.authenticated:
     with col_l2:
         if not st.session_state.otp_sent:
             # Step 1: Request OTP
-            st.markdown("##### 1. Enter Registered Email")
+            st.markdown("##### 1. Enter Email Address")
             
-            # Quick fill pills for judges
-            st.caption("Quick Select Profile (or type your email):")
+            # Quick profile selector
+            st.caption("Select a Role or Type Any Email Address:")
             p1, p2, p3 = st.columns(3)
-            default_email = "1ms25me057@msrit.edu"
+            default_val = st.session_state.get("selected_preset_email", "")
             with p1:
                 if st.button("🎓 1ms25me057@msrit.edu", use_container_width=True):
-                    default_email = "1ms25me057@msrit.edu"
+                    st.session_state["selected_preset_email"] = "1ms25me057@msrit.edu"
+                    st.rerun()
             with p2:
                 if st.button("👨‍⚖️ Judge Profile", use_container_width=True):
-                    default_email = "judge@google.hackathon"
+                    st.session_state["selected_preset_email"] = "judge@google.hackathon"
+                    st.rerun()
             with p3:
                 if st.button("⚡ Operator", use_container_width=True):
-                    default_email = "operator@powergrid.org"
+                    st.session_state["selected_preset_email"] = "operator@powergrid.org"
+                    st.rerun()
 
-            user_email = st.text_input("Work Email Address:", value=default_email)
-
-            with st.expander("🔑 Email Dispatch API Key (Resend or Web3Forms)", expanded=False):
-                resend_key_input = st.text_input(
-                    "API Key (Resend re_... or Web3Forms):",
-                    type="password",
-                    value=os.getenv("RESEND_API_KEY", st.session_state.get("resend_key", "")),
-                    help="Paste your free API key to dispatch real emails directly to your Gmail inbox."
-                )
-                if resend_key_input:
-                    st.session_state["resend_key"] = resend_key_input.strip()
+            user_email = st.text_input(
+                "Email Address:",
+                value=st.session_state.get("selected_preset_email", "1ms25me057@msrit.edu"),
+                placeholder="Enter any work or personal email (e.g. name@gmail.com)"
+            )
 
             if st.button("📨 Send 6-Digit Verification Code", type="primary", use_container_width=True):
                 if user_email and "@" in user_email:
