@@ -362,14 +362,25 @@ if not st.session_state.authenticated:
 
             user_email = st.text_input("Work Email Address:", value=default_email)
 
+            with st.expander("🔑 Resend API Key (Optional for Live Inbox Delivery)", expanded=False):
+                resend_key_input = st.text_input(
+                    "Resend API Key (starts with re_...):",
+                    type="password",
+                    value=os.getenv("RESEND_API_KEY", st.session_state.get("resend_key", "")),
+                    help="Paste your free Resend key to dispatch real emails directly to your inbox."
+                )
+                if resend_key_input:
+                    st.session_state["resend_key"] = resend_key_input.strip()
+
             if st.button("📨 Send 6-Digit Verification Code", type="primary", use_container_width=True):
                 if user_email and "@" in user_email:
                     otp = auth_mgr.generate_otp(user_email)
-                    success, msg = auth_mgr.send_otp_email(user_email, otp)
+                    r_key = st.session_state.get("resend_key", os.getenv("RESEND_API_KEY", ""))
+                    success, msg = auth_mgr.send_otp_email(user_email, otp, resend_api_key=r_key)
                     st.session_state.otp_sent = True
                     st.session_state.current_otp_email = user_email
                     st.session_state.last_generated_otp = otp
-                    st.success(f"Verification code dispatched to {user_email}")
+                    st.success(msg)
                     st.rerun()
                 else:
                     st.error("Please provide a valid email address.")
