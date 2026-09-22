@@ -380,7 +380,7 @@ if not st.session_state.authenticated:
                     st.session_state.otp_sent = True
                     st.session_state.current_otp_email = user_email
                     st.session_state.last_generated_otp = otp
-                    st.success(msg)
+                    st.session_state.delivery_feedback = (success, msg)
                     st.rerun()
                 else:
                     st.error("Please provide a valid email address.")
@@ -388,7 +388,16 @@ if not st.session_state.authenticated:
         else:
             # Step 2: Verify OTP
             st.markdown(f"##### 2. Verify OTP for `{st.session_state.current_otp_email}`")
-            st.info("A 6-digit One-Time Password (OTP) has been dispatched to your email. Valid for 5 minutes.")
+            
+            # Show live delivery feedback (Resend status / Sandbox)
+            if 'delivery_feedback' in st.session_state:
+                is_ok, feed_msg = st.session_state.delivery_feedback
+                if is_ok:
+                    st.success(feed_msg)
+                else:
+                    st.warning(feed_msg)
+
+            st.info("A 6-digit One-Time Password (OTP) has been dispatched. Valid for 5 minutes.")
 
             # Sandbox / Delivery banner to ensure zero friction for evaluation
             st.markdown(f"""

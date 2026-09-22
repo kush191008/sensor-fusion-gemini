@@ -83,9 +83,10 @@ class AuthManager:
                 with urllib.request.urlopen(req, timeout=10) as resp:
                     resp_body = json.loads(resp.read().decode("utf-8"))
                     email_id = resp_body.get("id", "SENT")
+                    status_str = f"SENT_VIA_RESEND:{email_id}"
                     if clean_email in self.active_otps:
-                        self.active_otps[clean_email]["delivery_status"] = f"SENT_VIA_RESEND:{email_id}"
-                    return True, f"Real email delivered to {clean_email} via Resend (ID: {email_id[:12]})."
+                        self.active_otps[clean_email]["delivery_status"] = status_str
+                    return True, f"✅ Real email successfully sent to {clean_email} via Resend (Email ID: {email_id[:12]}). Check your inbox!"
             except Exception as e:
                 err_msg = str(e)
                 if isinstance(e, urllib.error.HTTPError):
@@ -94,9 +95,10 @@ class AuthManager:
                         err_msg = err_json.get("message", err_msg)
                     except Exception:
                         pass
+                status_str = f"RESEND_FAILED: {err_msg}"
                 if clean_email in self.active_otps:
-                    self.active_otps[clean_email]["delivery_status"] = f"RESEND_FAILED: {err_msg}"
-                return True, f"Delivered via Secure Channel (Resend note: {err_msg[:45]}). OTP: {otp}"
+                    self.active_otps[clean_email]["delivery_status"] = status_str
+                return False, f"⚠️ Resend Notice: {err_msg} (Note: On Resend free tier, enter the exact email you signed up with on resend.com)."
 
         # 2. Attempt delivery via standard SMTP
         smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
