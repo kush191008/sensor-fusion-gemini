@@ -1,9 +1,14 @@
 """
 Gemini-Powered Intelligent Sensor Fusion
-Enterprise Demonstration Dashboard with OTP-based Email Authentication & Offline Edge Resilience.
+Enterprise Demonstration Dashboard for Google AI Hackathon.
 
-Challenge 01: Intermittent Connectivity & Store-and-Forward Reconciler
-Challenge 02: Login Authentication with OTP-based Email Verification
+Solves:
+1. Detecting sensor drift and catastrophic failures
+2. Estimating corrected readings via Discrete Adaptive Kalman Filtering
+3. Adapting without continuous labeled data (Spatial Consensus)
+4. Reporting Bayesian uncertainty during changing environmental conditions
+5. Explaining physical root-causes via Gemini 2.0 Flash
+6. Intermittent Connectivity Challenge: Edge-Native Offline Resilience & Cloud Store-and-Forward Reconciler
 """
 
 import os
@@ -42,10 +47,6 @@ import edge_offline_manager
 importlib.reload(edge_offline_manager)
 from edge_offline_manager import EdgeOfflineSyncManager
 
-import auth_manager
-importlib.reload(auth_manager)
-from auth_manager import AuthManager
-
 load_dotenv()
 
 # ----------------- PAGE CONFIGURATION -----------------
@@ -69,38 +70,12 @@ st.markdown("""
         font-family: 'JetBrains Mono', monospace !important;
     }
 
-    /* Login Portal Card */
-    .login-container {
-        max-width: 520px;
-        margin: 40px auto;
-        background: linear-gradient(135deg, rgba(13, 22, 40, 0.95) 0%, rgba(20, 32, 58, 0.95) 100%);
-        border: 1px solid rgba(66, 133, 244, 0.4);
-        border-radius: 18px;
-        padding: 36px 32px;
-        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
-        text-align: center;
-    }
-    .login-title {
-        font-size: 1.8rem;
-        font-weight: 800;
-        background: linear-gradient(90deg, #FFFFFF 0%, #8AB4F8 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        margin-bottom: 6px;
-    }
-    .login-subtitle {
-        font-size: 0.9rem;
-        color: #94A3B8;
-        line-height: 1.5;
-        margin-bottom: 24px;
-    }
-
     /* Executive Hero styling */
     .hero-container {
         background: linear-gradient(135deg, rgba(13, 22, 40, 0.95) 0%, rgba(20, 32, 58, 0.95) 100%);
         border: 1px solid rgba(66, 133, 244, 0.3);
         border-radius: 16px;
-        padding: 24px 28px;
+        padding: 26px 30px;
         margin-bottom: 20px;
         box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
         position: relative;
@@ -118,11 +93,11 @@ st.markdown("""
     }
 
     .hero-subtitle {
-        font-size: 0.95rem;
+        font-size: 0.98rem;
         color: #94A3B8;
         line-height: 1.5;
         max-width: 950px;
-        margin-bottom: 14px;
+        margin-bottom: 16px;
     }
 
     .badge-container {
@@ -137,9 +112,9 @@ st.markdown("""
         gap: 6px;
         background: rgba(15, 23, 42, 0.8);
         border: 1px solid rgba(148, 163, 184, 0.25);
-        padding: 4px 12px;
+        padding: 5px 12px;
         border-radius: 20px;
-        font-size: 0.8rem;
+        font-size: 0.82rem;
         font-weight: 600;
         color: #E2E8F0;
         backdrop-filter: blur(8px);
@@ -148,20 +123,6 @@ st.markdown("""
     .badge-green { border-color: rgba(52, 168, 83, 0.5); color: #81C995; }
     .badge-yellow { border-color: rgba(251, 188, 4, 0.5); color: #FDD663; }
     .badge-purple { border-color: rgba(168, 85, 247, 0.5); color: #C084FC; }
-
-    /* Top User Bar */
-    .user-bar {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        background: rgba(15, 23, 42, 0.7);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 10px;
-        padding: 8px 16px;
-        margin-bottom: 16px;
-        font-size: 0.82rem;
-        color: #94A3B8;
-    }
 
     /* KPI Cards */
     .kpi-card {
@@ -308,136 +269,13 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ----------------- SESSION STATE INITIALIZATION -----------------
-if 'auth_manager' not in st.session_state:
-    st.session_state.auth_manager = AuthManager()
 if 'offline_manager' not in st.session_state:
     st.session_state.offline_manager = EdgeOfflineSyncManager(buffer_capacity=5000)
-if 'authenticated' not in st.session_state:
-    st.session_state.authenticated = False
-if 'otp_sent' not in st.session_state:
-    st.session_state.otp_sent = False
-if 'current_otp_email' not in st.session_state:
-    st.session_state.current_otp_email = ""
-if 'last_generated_otp' not in st.session_state:
-    st.session_state.last_generated_otp = ""
 
-auth_mgr = st.session_state.auth_manager
 sync_mgr = st.session_state.offline_manager
-
-
-# =====================================================================
-# CHALLENGE 02: PRODUCTION-GRADE OTP-BASED EMAIL AUTHENTICATION
-# =====================================================================
-if not st.session_state.authenticated:
-    st.markdown("""
-    <div class="login-container">
-        <div style="font-size: 2.5rem; margin-bottom: 8px;">🔐</div>
-        <div class="login-title">Mission Control Authentication</div>
-        <div class="login-subtitle">
-            Zero-Trust Multi-Factor Verification via Resend API<br>
-            Please authenticate with your registered work or personal email address.
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    col_l1, col_l2, col_l3 = st.columns([1, 1.4, 1])
-    with col_l2:
-        if not st.session_state.get("otp_sent", False):
-            # ----------------- STEP 1: ENTER ANY EMAIL -----------------
-            st.markdown("##### 1. Enter Your Email Address")
-            user_email = st.text_input(
-                "Email Address:",
-                value=st.session_state.get("current_otp_email", ""),
-                placeholder="e.g. user@gmail.com, judge@college.edu, engineer@org.com"
-            )
-
-            if st.button("📨 Send Verification Code", type="primary", use_container_width=True):
-                clean_email = user_email.strip().lower()
-                if clean_email:
-                    with st.spinner("⏳ Sending verification email..."):
-                        success, msg = auth_mgr.send_verification_email(clean_email)
-                        if success:
-                            st.session_state.otp_sent = True
-                            st.session_state.current_otp_email = clean_email
-                            st.session_state.delivery_feedback = msg
-                            st.rerun()
-                        else:
-                            st.error(msg)
-                else:
-                    st.error("Please enter a valid email address.")
-
-        else:
-            # ----------------- STEP 2: VERIFY OTP CODE -----------------
-            st.markdown(f"##### 2. Enter Verification Code")
-            st.success(st.session_state.get("delivery_feedback", "✅ Verification code sent successfully. Please check your inbox (and Spam folder)."))
-            st.caption(f"Code dispatched to: **{st.session_state.current_otp_email}** (Expires in 5 minutes)")
-
-            entered_otp = st.text_input(
-                "6-Digit Verification Code:",
-                max_chars=6,
-                placeholder="e.g. 123456",
-                help="Enter the 6-digit numerical code received in your email."
-            )
-
-            col_btn1, col_btn2 = st.columns(2)
-            with col_btn1:
-                if st.button("🔓 Verify & Login", type="primary", use_container_width=True):
-                    if entered_otp and len(entered_otp.strip()) == 6:
-                        with st.spinner("Verifying code..."):
-                            success, msg = auth_mgr.verify_otp(st.session_state.current_otp_email, entered_otp)
-                            if success:
-                                auth_mgr.login_session(st.session_state, st.session_state.current_otp_email)
-                                st.success("✅ Email Verified Successfully")
-                                time.sleep(0.5)
-                                st.rerun()
-                            else:
-                                st.error(msg)
-                    else:
-                        st.error("Please enter the complete 6-digit verification code.")
-
-            with col_btn2:
-                allowed, remaining = auth_mgr.can_resend(st.session_state.current_otp_email)
-                if allowed:
-                    if st.button("🔄 Resend Code", use_container_width=True):
-                        with st.spinner("⏳ Sending fresh verification code..."):
-                            success, msg = auth_mgr.send_verification_email(st.session_state.current_otp_email)
-                            if success:
-                                st.session_state.delivery_feedback = msg
-                                st.rerun()
-                            else:
-                                st.error(msg)
-                else:
-                    st.button(f"⏳ Resend ({remaining}s)", disabled=True, use_container_width=True)
-
-            st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
-            if st.button("← Use a different email address", use_container_width=True):
-                st.session_state.otp_sent = False
-                st.rerun()
-
-    st.stop()
-
-
-# =====================================================================
-# AUTHENTICATED APPLICATION VIEW
-# =====================================================================
 
 # ----------------- SIDEBAR CONTROLS -----------------
 with st.sidebar:
-    # User Profile & Logout
-    st.markdown("### 👤 Operator Profile")
-    st.markdown(f"""
-    <div style="background:#0F172A; border:1px solid #334155; border-radius:10px; padding:12px; margin-bottom:12px;">
-        <div style="font-size:0.85rem; color:#F1F5F9; font-weight:600;">{st.session_state.get('user_email', 'Operator')}</div>
-        <div style="font-size:0.75rem; color:#34D399; margin-top:2px;">● Verified via OTP Authentication</div>
-        <div style="font-size:0.7rem; color:#64748B; margin-top:4px;">Session: {st.session_state.get('session_id', 'AUTH-SESSION')}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    if st.button("🚪 Sign Out / Logout", use_container_width=True):
-        auth_mgr.logout_session(st.session_state)
-        st.rerun()
-
-    st.markdown("---")
     st.markdown("### 🎛️ Mission & Simulation")
     
     scenario_options = {
@@ -560,21 +398,6 @@ telemetry_context = {
 }
 
 
-# ----------------- TOP USER STATUS BAR -----------------
-st.markdown(f"""
-<div class="user-bar">
-    <div>
-        <strong>Operator:</strong> {st.session_state.get('user_email', 'Operator')} | 
-        <strong>Token:</strong> <code>{st.session_state.get('session_id', 'AUTH-SESSION')}</code> | 
-        <strong>Security:</strong> <span style="color:#34D399; font-weight:600;">MFA Verified (OTP)</span>
-    </div>
-    <div>
-        <strong>Domain:</strong> {scenario_cfg['title']}
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-
 # ----------------- HERO SECTION -----------------
 st.markdown("""
 <div class="hero-container">
@@ -587,7 +410,7 @@ st.markdown("""
         <span class="feature-badge badge-green">✅ AI Fault Diagnosis</span>
         <span class="feature-badge badge-yellow">✅ Adaptive Sensor Fusion</span>
         <span class="feature-badge badge-purple">🌐 Offline Resilience & Cloud Sync</span>
-        <span class="feature-badge">🔐 OTP Email Verified (Challenge 02)</span>
+        <span class="feature-badge">⚡ Real-Time Bayesian Bounds</span>
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1279,9 +1102,9 @@ with imp4:
 with imp5:
     st.markdown("""
     <div class="impact-card" style="text-align:center;">
-        <div style="font-size:1.8rem; margin-bottom:6px;">🔐</div>
-        <strong style="color:#F9FAFB; font-size:0.85rem;">Zero-Trust MFA Access</strong>
-        <p style="font-size:0.75rem; color:#9CA3AF; margin-top:4px;">OTP email authentication protects critical infrastructure.</p>
+        <div style="font-size:1.8rem; margin-bottom:6px;">🌐</div>
+        <strong style="color:#F9FAFB; font-size:0.85rem;">Offline Edge Resilience</strong>
+        <p style="font-size:0.75rem; color:#9CA3AF; margin-top:4px;">Store-and-forward queue auto-reconciles after outages.</p>
     </div>
     """, unsafe_allow_html=True)
 
