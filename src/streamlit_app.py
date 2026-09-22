@@ -349,25 +349,25 @@ if not st.session_state.authenticated:
             # Quick fill pills for judges
             st.caption("Quick Select Profile (or type your email):")
             p1, p2, p3 = st.columns(3)
-            default_email = "judge@google.hackathon"
+            default_email = "1ms25me057@msrit.edu"
             with p1:
+                if st.button("🎓 1ms25me057@msrit.edu", use_container_width=True):
+                    default_email = "1ms25me057@msrit.edu"
+            with p2:
                 if st.button("👨‍⚖️ Judge Profile", use_container_width=True):
                     default_email = "judge@google.hackathon"
-            with p2:
+            with p3:
                 if st.button("⚡ Operator", use_container_width=True):
                     default_email = "operator@powergrid.org"
-            with p3:
-                if st.button("🚁 Flight Bay", use_container_width=True):
-                    default_email = "telemetry@aerospace.io"
 
             user_email = st.text_input("Work Email Address:", value=default_email)
 
-            with st.expander("🔑 Resend API Key (Optional for Live Inbox Delivery)", expanded=False):
+            with st.expander("🔑 Email Dispatch API Key (Resend or Web3Forms)", expanded=False):
                 resend_key_input = st.text_input(
-                    "Resend API Key (starts with re_...):",
+                    "API Key (Resend re_... or Web3Forms):",
                     type="password",
                     value=os.getenv("RESEND_API_KEY", st.session_state.get("resend_key", "")),
-                    help="Paste your free Resend key to dispatch real emails directly to your inbox."
+                    help="Paste your free API key to dispatch real emails directly to your Gmail inbox."
                 )
                 if resend_key_input:
                     st.session_state["resend_key"] = resend_key_input.strip()
