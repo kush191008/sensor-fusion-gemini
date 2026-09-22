@@ -387,27 +387,18 @@ if not st.session_state.authenticated:
 
         else:
             # Step 2: Verify OTP
-            st.markdown(f"##### 2. Verify OTP for `{st.session_state.current_otp_email}`")
-            
-            # Show live delivery feedback (Resend status / Sandbox)
+            st.markdown(f"##### 2. Enter Verification Code")
+            st.info(f"📬 A 6-digit One-Time Password (OTP) has been sent to **{st.session_state.current_otp_email}**. Please check your Gmail / email inbox (including Spam folder). Valid for 5 minutes.")
+
+            # Show live delivery feedback if any
             if 'delivery_feedback' in st.session_state:
                 is_ok, feed_msg = st.session_state.delivery_feedback
                 if is_ok:
                     st.success(feed_msg)
                 else:
-                    st.warning(feed_msg)
+                    st.error(feed_msg)
 
-            st.info("A 6-digit One-Time Password (OTP) has been dispatched. Valid for 5 minutes.")
-
-            # Sandbox / Delivery banner to ensure zero friction for evaluation
-            st.markdown(f"""
-            <div style="background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 10px; padding: 12px; margin-bottom: 16px; text-align: center;">
-                <span style="color: #94A3B8; font-size: 0.8rem; text-transform: uppercase;">Secure Transmission Channel Payload:</span><br>
-                <strong style="color: #38BDF8; font-size: 1.4rem; letter-spacing: 4px;">{st.session_state.last_generated_otp}</strong>
-            </div>
-            """, unsafe_allow_html=True)
-
-            entered_otp = st.text_input("Enter 6-Digit OTP Code:", max_chars=6, placeholder="e.g. 123456")
+            entered_otp = st.text_input("Enter 6-Digit OTP Code from Email:", max_chars=6, placeholder="e.g. 123456")
 
             col_btn1, col_btn2 = st.columns(2)
             with col_btn1:

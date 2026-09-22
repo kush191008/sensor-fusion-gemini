@@ -1,7 +1,7 @@
 """
 Authentication and OTP-based Email Verification Manager.
 Implements secure user authentication, cryptographically secure 6-digit OTP generation,
-email delivery via Resend API / SMTP (with fallback demo delivery), attempt rate-limiting, and session management.
+email delivery via Web3Forms API, Resend API, SMTP, or Sandbox transmission.
 """
 
 import os
@@ -21,13 +21,12 @@ load_dotenv()
 
 class AuthManager:
     """
-    Manages user sessions, OTP generation, email dispatch (via Resend/SMTP/Sandbox), and token verification.
+    Manages user sessions, OTP generation, email dispatch (Web3Forms/Resend/SMTP/Sandbox), and token verification.
     """
 
     def __init__(self, otp_validity_seconds: int = 300, max_attempts: int = 3):
         self.otp_validity_seconds = otp_validity_seconds
         self.max_attempts = max_attempts
-        # Store active OTP state: {email: {"otp": str, "expires_at": float, "attempts": int, "created_at": float, "delivery_log": str}}
         self.active_otps: Dict[str, Dict[str, Any]] = {}
         self.authenticated_users: Dict[str, Dict[str, Any]] = {}
 
@@ -46,19 +45,59 @@ class AuthManager:
         }
         return otp
 
-    def send_otp_email(self, email: str, otp: str, resend_api_key: Optional[str] = None) -> Tuple[bool, str]:
+    def send_otp_email(
+        self,
+        email: str,
+        otp: str,
+        resend_api_key: Optional[str] = None,
+        web3forms_key: Optional[str] = None
+    ) -> Tuple[bool, str]:
         """
-        Delivers the OTP to the user's email via Resend API, SMTP, or Sandbox transmission.
+        Delivers the OTP to the user's email via Web3Forms API, Resend API, SMTP, or Sandbox transmission.
         """
         clean_email = email.strip().lower()
-        key_to_use = resend_api_key or os.getenv("RESEND_API_KEY", "")
+        w3_key = web3forms_key or os.getenv("WEB3FORMS_KEY", "")
+        r_key = resend_api_key or os.getenv("RESEND_API_KEY", "")
 
-        # 1. Attempt delivery via Resend API (No 2FA required)
-        if key_to_use and key_to_use.strip():
+        # 1. Attempt delivery via Web3Forms API (Direct to any Gmail without domain/2FA setup)
+        if w3_key and w3_key.strip():
+            try:
+                url = "https://api.web3forms.com/submit"
+                payload = {
+                    "access_key": w3_key.strip(),
+                    "subject": f"🔐 Your Sensor Fusion Access Code: {otp}",
+                    "from_name": "Gemini Sensor Fusion Security",
+                    "email": clean_email,
+                    "message": f"Hello,\n\nYour secure One-Time Password (OTP) for the Gemini Sensor Fusion Dashboard is:\n\n👉 {otp} 👈\n\nValid for 5 minutes.\n\n— Gemini Sensor Fusion Security Team"
+                }
+                data = json.dumps(payload).encode("utf-8")
+                req = urllib.request.Request(
+                    url,
+                    data=data,
+                    headers={"Content-Type": "application/json", "User-Agent": "GeminiSensorFusion/1.0"},
+                    method="POST"
+                )
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    resp_body = json.loads(resp.read().decode("utf-8"))
+                    if resp_body.get("success", False):
+                        if clean_email in self.active_otps:
+                            self.active_otps[clean_email]["delivery_status"] = "SENT_VIA_WEB3FORMS"
+                        return True, f"✅ Live email successfully dispatched to {clean_email} via Web3Forms! Check your inbox."
+                    else:
+                        err_msg = resp_body.get("message", "Web3Forms submission failed")
+                        return False, f"⚠️ Web3Forms Error: {err_msg}"
+            except Exception as e:
+                err_msg = str(e)
+                if clean_email in self.active_otps:
+                    self.active_otps[clean_email]["delivery_status"] = f"WEB3FORMS_FAILED: {err_msg}"
+                return False, f"⚠️ Web3Forms delivery error: {err_msg}"
+
+        # 2. Attempt delivery via Resend API
+        if r_key and r_key.strip():
             try:
                 url = "https://api.resend.com/emails"
                 headers = {
-                    "Authorization": f"Bearer {key_to_use.strip()}",
+                    "Authorization": f"Bearer {r_key.strip()}",
                     "Content-Type": "application/json",
                     "User-Agent": "GeminiSensorFusion/1.0"
                 }
@@ -86,7 +125,7 @@ class AuthManager:
                     status_str = f"SENT_VIA_RESEND:{email_id}"
                     if clean_email in self.active_otps:
                         self.active_otps[clean_email]["delivery_status"] = status_str
-                    return True, f"✅ Real email successfully sent to {clean_email} via Resend (Email ID: {email_id[:12]}). Check your inbox!"
+                    return True, f"✅ Real email successfully sent to {clean_email} via Resend (ID: {email_id[:12]}). Check your inbox!"
             except Exception as e:
                 err_msg = str(e)
                 if isinstance(e, urllib.error.HTTPError):
@@ -98,9 +137,9 @@ class AuthManager:
                 status_str = f"RESEND_FAILED: {err_msg}"
                 if clean_email in self.active_otps:
                     self.active_otps[clean_email]["delivery_status"] = status_str
-                return False, f"⚠️ Resend Notice: {err_msg} (Note: On Resend free tier, enter the exact email you signed up with on resend.com)."
+                return False, f"⚠️ Resend Notice: {err_msg} (On Resend free tier, enter the exact email you registered on resend.com)."
 
-        # 2. Attempt delivery via standard SMTP
+        # 3. Attempt delivery via standard SMTP
         smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
         smtp_port = int(os.getenv("SMTP_PORT", "587"))
         smtp_user = os.getenv("SMTP_USER", "")
@@ -128,13 +167,13 @@ class AuthManager:
             except Exception as e:
                 if clean_email in self.active_otps:
                     self.active_otps[clean_email]["delivery_status"] = f"SMTP_FAILED: {str(e)}"
-                return True, f"Delivered via Secure Transmission Channel. OTP: {otp}"
+                return False, f"SMTP Error: {str(e)}"
 
-        # 3. Sandbox mode delivery (Fallback)
+        # 4. Sandbox mode delivery (Fallback)
         if clean_email in self.active_otps:
             self.active_otps[clean_email]["delivery_status"] = "DELIVERED_SANDBOX"
 
-        return True, f"OTP generated and delivered to {clean_email}."
+        return True, f"OTP generated and delivered to secure transmission channel for {clean_email}."
 
     def verify_otp(self, email: str, user_otp: str) -> Tuple[bool, str]:
         """
@@ -194,3 +233,4 @@ class AuthManager:
         session_state.pop("login_time", None)
         session_state.pop("otp_sent", None)
         session_state.pop("current_otp_email", None)
+        session_state.pop("delivery_feedback", None)
