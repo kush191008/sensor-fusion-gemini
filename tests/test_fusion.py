@@ -119,6 +119,45 @@ class TestSensorFusionPipeline(unittest.TestCase):
         self.assertIn("snr_db", fft_data)
         self.assertIn("spectral_diagnosis", fft_data)
 
+    def test_offline_edge_resilience_and_cloud_sync(self):
+        """Verify intermittent connectivity handling, offline buffering, and cloud reconciliation."""
+        from edge_offline_manager import EdgeOfflineSyncManager
+
+        manager = EdgeOfflineSyncManager(buffer_capacity=100)
+        self.assertTrue(manager.is_online)
+
+        # 1. Disconnect network
+        manager.set_connectivity(False)
+        self.assertFalse(manager.is_online)
+
+        # 2. Operate offline (Record frames during outage)
+        for t in range(50):
+            manager.record_edge_frame(
+                timestamp=t,
+                raw_readings={"sensor_temp": 650.0 + t * 0.1, "sensor_humidity": 99.0 if t > 30 else 650.0},
+                fused_estimate=650.5,
+                uncertainty_sigma=0.35,
+                isolated_sensors=["sensor_humidity"] if t > 30 else []
+            )
+
+        status = manager.get_status_summary()
+        self.assertEqual(status["pending_frames"], 50)
+        self.assertGreater(status["pending_events"], 0)
+
+        # 3. Reconnect network
+        manager.set_connectivity(True)
+        self.assertTrue(manager.is_online)
+
+        # 4. Recover & Reconcile with Gemini Cloud
+        reconciliation = manager.reconcile_with_cloud(self.analyzer, scenario_title="Test Turbine")
+        self.assertEqual(reconciliation["synced_frames_count"], 50)
+        self.assertEqual(reconciliation["cloud_status"], "SYNCHRONIZED_AND_VERIFIED")
+
+        # Verify buffer is cleared after sync
+        self.assertEqual(len(manager.offline_queue), 0)
+        self.assertEqual(len(manager.offline_events), 0)
+
 
 if __name__ == '__main__':
     unittest.main()
+
