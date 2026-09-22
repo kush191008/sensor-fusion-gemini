@@ -326,7 +326,7 @@ sync_mgr = st.session_state.offline_manager
 
 
 # =====================================================================
-# CHALLENGE 02: LOGIN AUTHENTICATION WITH OTP-BASED EMAIL VERIFICATION
+# CHALLENGE 02: PRODUCTION-GRADE OTP-BASED EMAIL AUTHENTICATION
 # =====================================================================
 if not st.session_state.authenticated:
     st.markdown("""
@@ -334,83 +334,85 @@ if not st.session_state.authenticated:
         <div style="font-size: 2.5rem; margin-bottom: 8px;">🔐</div>
         <div class="login-title">Mission Control Authentication</div>
         <div class="login-subtitle">
-            Secure OTP-based Email Verification (Challenge 02)<br>
-            Please authenticate to access the Gemini Sensor Fusion Dashboard.
+            Zero-Trust Multi-Factor Verification via Resend API<br>
+            Please authenticate with your registered work or personal email address.
         </div>
     </div>
     """, unsafe_allow_html=True)
 
     col_l1, col_l2, col_l3 = st.columns([1, 1.4, 1])
     with col_l2:
-        if not st.session_state.otp_sent:
-            # Step 1: Request OTP
-            st.markdown("##### 1. Enter Email Address")
-            
-            # Quick profile selector
-            st.caption("Select a Role or Type Any Email Address:")
-            p1, p2, p3 = st.columns(3)
-            default_val = st.session_state.get("selected_preset_email", "")
-            with p1:
-                if st.button("🎓 1ms25me057@msrit.edu", use_container_width=True):
-                    st.session_state["selected_preset_email"] = "1ms25me057@msrit.edu"
-                    st.rerun()
-            with p2:
-                if st.button("👨‍⚖️ Judge Profile", use_container_width=True):
-                    st.session_state["selected_preset_email"] = "judge@google.hackathon"
-                    st.rerun()
-            with p3:
-                if st.button("⚡ Operator", use_container_width=True):
-                    st.session_state["selected_preset_email"] = "operator@powergrid.org"
-                    st.rerun()
-
+        if not st.session_state.get("otp_sent", False):
+            # ----------------- STEP 1: ENTER ANY EMAIL -----------------
+            st.markdown("##### 1. Enter Your Email Address")
             user_email = st.text_input(
                 "Email Address:",
-                value=st.session_state.get("selected_preset_email", "1ms25me057@msrit.edu"),
-                placeholder="Enter any work or personal email (e.g. name@gmail.com)"
+                value=st.session_state.get("current_otp_email", ""),
+                placeholder="e.g. user@gmail.com, judge@college.edu, engineer@org.com"
             )
 
-            if st.button("📨 Send 6-Digit Verification Code", type="primary", use_container_width=True):
-                if user_email and "@" in user_email:
-                    otp = auth_mgr.generate_otp(user_email)
-                    r_key = st.session_state.get("resend_key", os.getenv("RESEND_API_KEY", ""))
-                    success, msg = auth_mgr.send_otp_email(user_email, otp, resend_api_key=r_key)
-                    st.session_state.otp_sent = True
-                    st.session_state.current_otp_email = user_email
-                    st.session_state.last_generated_otp = otp
-                    st.session_state.delivery_feedback = (success, msg)
-                    st.rerun()
+            if st.button("📨 Send Verification Code", type="primary", use_container_width=True):
+                clean_email = user_email.strip().lower()
+                if clean_email:
+                    with st.spinner("⏳ Sending verification email..."):
+                        success, msg = auth_mgr.send_verification_email(clean_email)
+                        if success:
+                            st.session_state.otp_sent = True
+                            st.session_state.current_otp_email = clean_email
+                            st.session_state.delivery_feedback = msg
+                            st.rerun()
+                        else:
+                            st.error(msg)
                 else:
-                    st.error("Please provide a valid email address.")
+                    st.error("Please enter a valid email address.")
 
         else:
-            # Step 2: Verify OTP
+            # ----------------- STEP 2: VERIFY OTP CODE -----------------
             st.markdown(f"##### 2. Enter Verification Code")
-            st.info(f"📬 A 6-digit One-Time Password (OTP) has been sent to **{st.session_state.current_otp_email}**. Please check your Gmail / email inbox (including Spam folder). Valid for 5 minutes.")
+            st.success(st.session_state.get("delivery_feedback", "✅ Verification code sent successfully. Please check your inbox (and Spam folder)."))
+            st.caption(f"Code dispatched to: **{st.session_state.current_otp_email}** (Expires in 5 minutes)")
 
-            # Show live delivery feedback if any
-            if 'delivery_feedback' in st.session_state:
-                is_ok, feed_msg = st.session_state.delivery_feedback
-                if is_ok:
-                    st.success(feed_msg)
-                else:
-                    st.error(feed_msg)
-
-            entered_otp = st.text_input("Enter 6-Digit OTP Code from Email:", max_chars=6, placeholder="e.g. 123456")
+            entered_otp = st.text_input(
+                "6-Digit Verification Code:",
+                max_chars=6,
+                placeholder="e.g. 123456",
+                help="Enter the 6-digit numerical code received in your email."
+            )
 
             col_btn1, col_btn2 = st.columns(2)
             with col_btn1:
                 if st.button("🔓 Verify & Login", type="primary", use_container_width=True):
-                    success, msg = auth_mgr.verify_otp(st.session_state.current_otp_email, entered_otp)
-                    if success:
-                        auth_mgr.login_session(st.session_state, st.session_state.current_otp_email)
-                        st.success("Authentication verified! Access granted.")
-                        st.rerun()
+                    if entered_otp and len(entered_otp.strip()) == 6:
+                        with st.spinner("Verifying code..."):
+                            success, msg = auth_mgr.verify_otp(st.session_state.current_otp_email, entered_otp)
+                            if success:
+                                auth_mgr.login_session(st.session_state, st.session_state.current_otp_email)
+                                st.success("✅ Email Verified Successfully")
+                                time.sleep(0.5)
+                                st.rerun()
+                            else:
+                                st.error(msg)
                     else:
-                        st.error(msg)
+                        st.error("Please enter the complete 6-digit verification code.")
+
             with col_btn2:
-                if st.button("🔄 Request New Code", use_container_width=True):
-                    st.session_state.otp_sent = False
-                    st.rerun()
+                allowed, remaining = auth_mgr.can_resend(st.session_state.current_otp_email)
+                if allowed:
+                    if st.button("🔄 Resend Code", use_container_width=True):
+                        with st.spinner("⏳ Sending fresh verification code..."):
+                            success, msg = auth_mgr.send_verification_email(st.session_state.current_otp_email)
+                            if success:
+                                st.session_state.delivery_feedback = msg
+                                st.rerun()
+                            else:
+                                st.error(msg)
+                else:
+                    st.button(f"⏳ Resend ({remaining}s)", disabled=True, use_container_width=True)
+
+            st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
+            if st.button("← Use a different email address", use_container_width=True):
+                st.session_state.otp_sent = False
+                st.rerun()
 
     st.stop()
 
